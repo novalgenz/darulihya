@@ -12,8 +12,15 @@ $input  = json_decode(file_get_contents('php://input'), true) ?? [];
 // ---- Auth helpers ----
 function isAuth()  { return isset($_SESSION['mis_user']); }
 function isAdmin() { return isAuth() && $_SESSION['mis_user']['role'] === 'admin'; }
-function requireAuth()  { if (!isAuth())  { echo json_encode(['error'=>'Unauthorized']); exit; } }
-function requireAdmin() { requireAuth();  if (!isAdmin()) { echo json_encode(['error'=>'Admin only']); exit; } }
+
+function response($data, $status = 200) {
+    http_response_code($status);
+    echo json_encode($data);
+    exit;
+}
+
+function requireAuth()  { if (!isAuth())  { response(['error'=>'Unauthorized'], 401); } }
+function requireAdmin() { requireAuth();  if (!isAdmin()) { response(['error'=>'Admin only'], 403); } }
 function currentUser()  { return $_SESSION['mis_user'] ?? null; }
 
 // ---- Helpers ----
@@ -47,7 +54,7 @@ case 'get_public':
     $j12    = $pdo->query("SELECT hari,mapel,jam FROM jadwal WHERE kelas='12' ORDER BY urutan,id")->fetchAll();
     $j36    = $pdo->query("SELECT hari,mapel,jam FROM jadwal WHERE kelas='36' ORDER BY urutan,id")->fetchAll();
 
-    echo json_encode([
+    response([
         'site' => [
             'title'         => $s['site_title'] ?? 'MIS DARUL IHYA',
             'tagline'       => $s['site_tagline'] ?? 'Akreditasi A',
@@ -92,7 +99,7 @@ case 'visitor':
         $_SESSION['mis_visited'] = true;
     }
     $row = $pdo->query("SELECT count FROM visitor WHERE id=1")->fetch();
-    echo json_encode(['count' => $row['count'] ?? 0]);
+    response(['count' => $row['count'] ?? 0]);
     break;
 
 // ---- LOGIN ----
@@ -105,9 +112,9 @@ case 'login':
     if ($u && password_verify($password, $u['password'])) {
         $_SESSION['mis_user'] = ['id'=>$u['id'],'username'=>$u['username'],'role'=>$u['role']];
         addLog($pdo, 'Login', "User $username login");
-        echo json_encode(['ok'=>true,'user'=>['username'=>$u['username'],'role'=>$u['role']]]);
+        response(['ok'=>true,'user'=>['username'=>$u['username'],'role'=>$u['role']]]);
     } else {
-        echo json_encode(['ok'=>false,'error'=>'Username/password salah atau akun tidak aktif']);
+        response(['ok'=>false,'error'=>'Username/password salah atau akun tidak aktif'], 401);
     }
     break;
 
@@ -115,39 +122,33 @@ case 'login':
 case 'logout':
     if (isAuth()) addLog($pdo, 'Logout', 'User '.currentUser()['username'].' logout');
     session_destroy();
-    echo json_encode(['ok'=>true]);
+    response(['ok'=>true]);
     break;
 
 // ---- CHECK SESSION ----
 case 'check_session':
-    echo json_encode(['auth'=>isAuth(), 'user'=> currentUser()]);
+    response(['auth'=>isAuth(), 'user'=> currentUser()]);
     break;
 
 // ---- SAVE PROFIL ----
 case 'save_profil':
     requireAuth();
     $fields = [
-        'site_title','site_tagline','site_hero_tagline',
-        'site_tentang','site_sejarah','site_visi','site_misi','site_tujuan',
-        'site_fasilitas','site_tenaga','site_penutup',
-        'kontak_alamat','kontak_telp','kontak_email','kontak_maps',
-        'wa_number','wa_message'
+        'site_title', 'site_tagline', 'site_hero_tagline',
+        'site_tentang', 'site_sejarah', 'site_visi', 'site_misi', 'site_tujuan',
+        'site_fasilitas', 'site_tenaga', 'site_penutup',
+        'kontak_alamat', 'kontak_telp', 'kontak_email', 'kontak_maps',
+        'wa_number', 'wa_message', 'logo'
     ];
-    $map = [
-        'site_title'=>'site_title','site_tagline'=>'site_tagline','site_hero_tagline'=>'site_hero_tagline',
-        'site_tentang'=>'site_tentang','site_sejarah'=>'site_sejarah','site_visi'=>'site_visi',
-        'site_misi'=>'site_misi','site_tujuan'=>'site_tujuan','site_fasilitas'=>'site_fasilitas',
-        'site_tenaga'=>'site_tenaga','site_penutup'=>'site_penutup',
-        'kontak_alamat'=>'kontak_alamat','kontak_telp'=>'kontak_telp',
-        'kontak_email'=>'kontak_email','kontak_maps'=>'kontak_maps',
-        'wa_number'=>'wa_number','wa_message'=>'wa_message'
-    ];
-    foreach ($map as $inputKey => $dbKey) {
-        if (isset($input[$inputKey])) setSetting($pdo, $dbKey, $input[$inputKey]);
+    
+    foreach ($fields as $field) {
+        if (isset($input[$field])) {
+            setSetting($pdo, $field, $input[$field]);
+        }
     }
-    if (!empty($input['logo'])) setSetting($pdo, 'logo', $input['logo']);
+
     addLog($pdo, 'Update Profil', 'Mengubah data profil');
-    echo json_encode(['ok'=>true]);
+    response(['ok' => true]);
     break;
 
 // ---- SAVE KEPSEK ----
@@ -166,10 +167,10 @@ case 'add_guru':
     $nama    = trim($input['nama'] ?? '');
     $jabatan = trim($input['jabatan'] ?? 'Guru Kelas');
     $foto    = $input['foto'] ?? null;
-    if (!$nama) { echo json_encode(['error'=>'Nama wajib diisi']); break; }
+    if (!$nama) { response(['error'=>'Nama wajib diisi'], 400); }
     $pdo->prepare("INSERT INTO guru (nama,jabatan,foto) VALUES (?,?,?)")->execute([$nama,$jabatan,$foto]);
     addLog($pdo, 'Tambah Guru', "Menambah guru: $nama");
-    echo json_encode(['ok'=>true,'id'=>$pdo->lastInsertId()]);
+    response(['ok'=>true,'id'=>$pdo->lastInsertId()]);
     break;
 
 case 'delete_guru':
@@ -239,10 +240,10 @@ case 'add_berita':
     $tanggal  = $input['tanggal'] ?? '';
     $kategori = $input['kategori'] ?? 'Berita';
     $isi      = trim($input['isi'] ?? '');
-    if (!$judul || !$isi) { echo json_encode(['error'=>'Judul dan isi harus diisi']); break; }
+    if (!$judul || !$isi) { response(['error'=>'Judul dan isi harus diisi'], 400); }
     $pdo->prepare("INSERT INTO berita (judul,tanggal,kategori,isi) VALUES (?,?,?,?)")->execute([$judul,$tanggal,$kategori,$isi]);
     addLog($pdo, 'Tambah Berita', "Menambah berita: $judul");
-    echo json_encode(['ok'=>true,'id'=>$pdo->lastInsertId()]);
+    response(['ok'=>true,'id'=>$pdo->lastInsertId()]);
     break;
 
 case 'edit_berita':

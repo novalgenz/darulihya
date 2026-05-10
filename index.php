@@ -229,254 +229,401 @@
 <footer>© 2026 MIS Darul Ihya | NPSN: 60706770</footer>
 
 <script>
+/**
+ * APP STATE & CONFIG
+ */
 let DATA = null;
 let currentKategori = 'semua';
 let currentPage = 1;
 const itemsPerPage = 6;
 
-// ---- Load data dari API ----
+/**
+ * CORE DATA LOADING
+ */
 async function loadData() {
     try {
         const res = await fetch('api.php?action=get_public');
         DATA = await res.json();
-        render();
-    } catch(e) {
+        renderAll();
+    } catch (e) {
         console.error('Gagal load data:', e);
     }
 }
 
-// ---- Visitor counter ----
 async function loadVisitor() {
     try {
         const res = await fetch('api.php?action=visitor');
         const json = await res.json();
-        document.getElementById('visitorCount').innerText = json.count;
-        document.getElementById('visitorCountFooter').innerText = json.count;
-    } catch(e) {}
-}
-
-function escapeHtml(str) {
-    return String(str || '').replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-}
-
-// ---- Render Berita Ringkasan ----
-function renderBeritaRingkasan() {
-    let arr = DATA.berita || [];
-    let terbaru = [...arr].slice(0,3);
-    let html = terbaru.map(b => `
-        <div class="berita-card">
-            <h4>${escapeHtml(b.judul)}</h4>
-            <small>${escapeHtml(b.tanggal)} · ${escapeHtml(b.kategori)}</small>
-            <p>${escapeHtml((b.isi||'').substring(0,100))}...</p>
-            <div class="btn-sm" onclick="document.querySelector('[data-page=berita]').click()">Baca Selengkapnya</div>
-        </div>
-    `).join('');
-    document.getElementById('beritaRingkasan').innerHTML = html || '<p>Belum ada berita.</p>';
-}
-
-// ---- Render Berita Full ----
-function renderBeritaFull() {
-    let arr = DATA.berita || [];
-    let filtered = currentKategori === 'semua' ? arr : arr.filter(b => b.kategori === currentKategori);
-    const totalPages = Math.ceil(filtered.length / itemsPerPage);
-    const start = (currentPage-1) * itemsPerPage;
-    const paginated = filtered.slice(start, start+itemsPerPage);
-    let html = paginated.map(b => `
-        <div class="berita-card">
-            <h4>${escapeHtml(b.judul)}</h4>
-            <small>${escapeHtml(b.tanggal)} · ${escapeHtml(b.kategori)}</small>
-            <p>${escapeHtml((b.isi||'').substring(0,200))}...</p>
-            <div class="btn-sm" onclick="alert('${escapeHtml(b.judul)}')">Baca Selengkapnya</div>
-        </div>
-    `).join('');
-    document.getElementById('beritaListFull').innerHTML = html || '<p>Tidak ada berita.</p>';
-    let pagHtml = '';
-    for (let i=1; i<=totalPages; i++) {
-        pagHtml += `<button class="page-btn ${i===currentPage?'active':''}" data-pg="${i}">${i}</button>`;
+        const count = json.count || 0;
+        document.getElementById('visitorCount').innerText = count;
+        document.getElementById('visitorCountFooter').innerText = count;
+    } catch (e) {
+        console.error('Visitor counter error');
     }
-    document.getElementById('paginationBerita').innerHTML = pagHtml;
-    document.querySelectorAll('.page-btn').forEach(btn => {
-        btn.addEventListener('click', () => { currentPage = parseInt(btn.dataset.pg); renderBeritaFull(); });
-    });
 }
 
-// ---- Render semua ----
-function render() {
+/**
+ * UTILITIES
+ */
+function escapeHtml(str) {
+    return String(str || '').replace(/[&<>]/g, m => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;'
+    }[m]));
+}
+
+/**
+ * RENDERING FUNCTIONS
+ */
+function renderAll() {
     if (!DATA) return;
     const s = DATA.site;
 
-    // Header
+    // 1. Header & Identity
     document.getElementById('siteTitle').innerText = s.title;
     document.getElementById('siteTagline').innerText = s.tagline;
     document.getElementById('heroTitle').innerHTML = s.title.replace(' ', '<br>');
     document.getElementById('heroTagline').innerText = s.heroTagline;
 
-    // Logo
     if (DATA.logo) {
         document.getElementById('logoIcon').innerHTML = `<img src="${DATA.logo}" style="width:100%;height:100%;object-fit:cover;">`;
     } else {
         document.getElementById('logoIcon').innerHTML = '🕌';
     }
 
-    // Profil
-    document.getElementById('tentangText').innerHTML = s.tentang;
-    document.getElementById('sejarahText').innerHTML = s.sejarah;
-    document.getElementById('visiText').innerHTML = s.visi;
-    document.getElementById('misiList').innerHTML = s.misi;
-    document.getElementById('tujuanList').innerHTML = s.tujuan;
-    document.getElementById('fasilitasText').innerHTML = s.fasilitas;
-    document.getElementById('tenagaPendidikText').innerHTML = s.tenagaPendidik;
-    document.getElementById('penutupText').innerHTML = s.penutup;
+    // 2. Profil Content
+    const profileSections = {
+        'tentangText': s.tentang,
+        'sejarahText': s.sejarah,
+        'visiText': s.visi,
+        'misiList': s.misi,
+        'tujuanList': s.tujuan,
+        'fasilitasText': s.fasilitas,
+        'tenagaPendidikText': s.tenagaPendidik,
+        'penutupText': s.penutup
+    };
+    
+    for (const [id, content] of Object.entries(profileSections)) {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = content || '';
+    }
 
-    // Kontak
+    // 3. Kontak
     document.getElementById('kontakAlamat').innerText = s.kontak.alamat;
     document.getElementById('kontakTelp').innerText = s.kontak.telp;
     document.getElementById('kontakEmail').innerText = s.kontak.email;
     document.getElementById('mapsContainer').innerHTML = s.kontak.maps || '';
     document.getElementById('statGuru').innerText = DATA.guru.length;
 
-    // Kepsek
-    let kepsekFoto = s.kepsek.foto || 'https://placehold.co/100';
+    // 4. Kepsek & Guru
+    renderKepsek(s.kepsek);
+    renderGuru(DATA.guru);
+
+    // 5. Slider & Gallery
+    renderSlider(DATA.slider);
+    renderGallery(DATA.galeri);
+
+    // 6. Jadwal & Biaya
+    renderJadwal(DATA.jadwal12, DATA.jadwal36);
+    renderBiaya(DATA.biayaGambar);
+
+    // 7. Berita
+    renderBeritaRingkasan();
+    if (document.getElementById('berita').classList.contains('active')) {
+        renderBeritaFull();
+    }
+
+    // 8. WhatsApp Button
+    document.getElementById('waBtn').onclick = () => {
+        const url = `https://wa.me/${s.waNumber}?text=${encodeURIComponent(s.waMessage)}`;
+        window.open(url, '_blank');
+    };
+}
+
+function renderKepsek(kepsek) {
+    const foto = kepsek.foto || 'https://placehold.co/100';
     document.getElementById('kepsekBox').innerHTML = `
         <div class="guru-card">
-            <div class="guru-img"><img src="${kepsekFoto}" onerror="this.src='https://placehold.co/100'"></div>
-            <div class="guru-name">${escapeHtml(s.kepsek.nama)}</div>
+            <div class="guru-img"><img src="${foto}" onerror="this.src='https://placehold.co/100'"></div>
+            <div class="guru-name">${escapeHtml(kepsek.nama)}</div>
             <div class="guru-role">Kepala Madrasah</div>
-            <div class="guru-motto">"${escapeHtml(s.kepsek.motto)}"</div>
+            <div class="guru-motto">"${escapeHtml(kepsek.motto)}"</div>
         </div>`;
+}
 
-    // Guru
-    document.getElementById('guruGrid').innerHTML = DATA.guru.map(g => `
+function renderGuru(guru) {
+    const html = guru.map(g => `
         <div class="guru-card">
             <div class="guru-img"><img src="${g.foto || 'https://placehold.co/80'}" onerror="this.src='https://placehold.co/80'"></div>
             <div class="guru-name">${escapeHtml(g.nama)}</div>
             <div class="guru-role">${escapeHtml(g.jabatan || 'Guru')}</div>
         </div>
-    `).join('') || '<p>Belum ada data guru</p>';
-
-    // Slider
-    let slides = DATA.slider;
-    document.getElementById('sliderTrack').innerHTML = slides.length
-        ? slides.map(s => `<div class="slide"><img src="${s}"></div>`).join('')
-        : `<div class="slide"><img src="https://placehold.co/800x500/1a472a/ffd700?text=MIS+Darul+Ihya"></div>`;
-    initSlider(slides.length || 1);
-
-    // Galeri
-    document.getElementById('galleryGrid').innerHTML = DATA.galeri.map(g => `<div class="gallery-item" onclick="openModal('${g}')"><img src="${g}" loading="lazy"></div>`).join('') || '<p>Belum ada foto galeri</p>';
-
-    // Jadwal
-    document.getElementById('jadwal12Body').innerHTML = DATA.jadwal12.map(row => `<tr>${row.map(c=>`<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
-    document.getElementById('jadwal36Body').innerHTML = DATA.jadwal36.map(row => `<tr>${row.map(c=>`<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('');
-
-    // Biaya
-    let biayaContainer = document.getElementById('biayaContainer');
-    if (DATA.biayaGambar) {
-        biayaContainer.innerHTML = `<img src="${DATA.biayaGambar}" style="max-width:100%;max-height:300px;border-radius:16px;border:2px solid var(--gold);cursor:pointer;" onclick="openModal('${DATA.biayaGambar}')"><p style="font-size:12px;color:gray;">Klik untuk memperbesar</p>`;
-    } else {
-        biayaContainer.innerHTML = `<div style="padding:30px;background:var(--gold-dim);border-radius:16px;"><i class="fas fa-image" style="font-size:48px;opacity:0.5;"></i><p>Informasi biaya akan diupdate</p></div>`;
-    }
-
-    // Berita
-    renderBeritaRingkasan();
-    if (document.getElementById('berita').classList.contains('active')) renderBeritaFull();
-
-    // WA
-    document.getElementById('waBtn').onclick = () => window.open(`https://wa.me/${s.waNumber}?text=${encodeURIComponent(s.waMessage)}`, '_blank');
+    `).join('');
+    document.getElementById('guruGrid').innerHTML = html || '<p>Belum ada data guru</p>';
 }
 
-// ---- Slider ----
+function renderSlider(slides) {
+    const track = document.getElementById('sliderTrack');
+    if (!slides || slides.length === 0) {
+        track.innerHTML = `<div class="slide"><img src="https://placehold.co/800x500/1a472a/ffd700?text=MIS+Darul+Ihya"></div>`;
+        initSliderControls(1);
+    } else {
+        track.innerHTML = slides.map(s => `<div class="slide"><img src="${s}"></div>`).join('');
+        initSliderControls(slides.length);
+    }
+}
+
+function renderGallery(images) {
+    const html = images.map(img => `
+        <div class="gallery-item" onclick="openModal('${img}')">
+            <img src="${img}" loading="lazy">
+        </div>
+    `).join('');
+    document.getElementById('galleryGrid').innerHTML = html || '<p>Belum ada foto galeri</p>';
+}
+
+function renderJadwal(j12, j36) {
+    document.getElementById('jadwal12Body').innerHTML = j12.map(row => 
+        `<tr>${row.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`
+    ).join('');
+    
+    document.getElementById('jadwal36Body').innerHTML = j36.map(row => 
+        `<tr>${row.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`
+    ).join('');
+}
+
+function renderBiaya(gambar) {
+    const container = document.getElementById('biayaContainer');
+    if (gambar) {
+        container.innerHTML = `
+            <img src="${gambar}" style="max-width:100%;max-height:300px;border-radius:16px;border:2px solid var(--gold);cursor:pointer;" onclick="openModal('${gambar}')">
+            <p style="font-size:12px;color:gray;margin-top:8px;">Klik untuk memperbesar</p>`;
+    } else {
+        container.innerHTML = `
+            <div style="padding:30px;background:var(--gold-dim);border-radius:16px;">
+                <i class="fas fa-image" style="font-size:48px;opacity:0.5;"></i>
+                <p>Informasi biaya akan segera diupdate</p>
+            </div>`;
+    }
+}
+
+function renderBeritaRingkasan() {
+    const arr = DATA.berita || [];
+    const terbaru = [...arr].slice(0, 3);
+    const html = terbaru.map(b => `
+        <div class="berita-card">
+            <h4>${escapeHtml(b.judul)}</h4>
+            <small>${escapeHtml(b.tanggal)} · ${escapeHtml(b.kategori)}</small>
+            <p>${escapeHtml((b.isi || '').substring(0, 100))}...</p>
+            <div class="btn-sm" onclick="document.querySelector('[data-page=berita]').click()">Baca Selengkapnya</div>
+        </div>
+    `).join('');
+    document.getElementById('beritaRingkasan').innerHTML = html || '<p>Belum ada berita.</p>';
+}
+
+function renderBeritaFull() {
+    const arr = DATA.berita || [];
+    const filtered = currentKategori === 'semua' ? arr : arr.filter(b => b.kategori === currentKategori);
+    const totalPages = Math.ceil(filtered.length / itemsPerPage);
+    const start = (currentPage - 1) * itemsPerPage;
+    const paginated = filtered.slice(start, start + itemsPerPage);
+
+    const html = paginated.map(b => `
+        <div class="berita-card">
+            <h4>${escapeHtml(b.judul)}</h4>
+            <small>${escapeHtml(b.tanggal)} · ${escapeHtml(b.kategori)}</small>
+            <p>${escapeHtml((b.isi || '').substring(0, 200))}...</p>
+            <div class="btn-sm" onclick="alert('${escapeHtml(b.judul)}')">Baca Selengkapnya</div>
+        </div>
+    `).join('');
+    
+    document.getElementById('beritaListFull').innerHTML = html || '<p>Tidak ada berita dalam kategori ini.</p>';
+    renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+    let pagHtml = '';
+    for (let i = 1; i <= totalPages; i++) {
+        pagHtml += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToNewsPage(${i})">${i}</button>`;
+    }
+    document.getElementById('paginationBerita').innerHTML = pagHtml;
+}
+
+function goToNewsPage(n) {
+    currentPage = n;
+    renderBeritaFull();
+    window.scrollTo({ top: document.getElementById('berita').offsetTop - 100, behavior: 'smooth' });
+}
+
+/**
+ * SLIDER CONTROLS
+ */
 let sliderIndex = 0, sliderInterval;
-function initSlider(total) {
+
+function initSliderControls(total) {
     if (sliderInterval) clearInterval(sliderInterval);
     sliderIndex = 0;
-    let dots = document.getElementById('sliderDots');
-    if (dots && total > 0) dots.innerHTML = Array.from({length:total},(_,i)=>`<div class="dot ${i===0?'active':''}" onclick="goSlide(${i})"></div>`).join('');
-    if (total <= 1) { document.getElementById('prevBtn').style.display='none'; document.getElementById('nextBtn').style.display='none'; return; }
-    document.getElementById('prevBtn').style.display='flex';
-    document.getElementById('nextBtn').style.display='flex';
-    sliderInterval = setInterval(()=>goSlide((sliderIndex+1)%total), 5000);
-    document.getElementById('prevBtn').onclick = ()=>{ clearInterval(sliderInterval); goSlide((sliderIndex-1+total)%total); sliderInterval=setInterval(()=>goSlide((sliderIndex+1)%total),5000); };
-    document.getElementById('nextBtn').onclick = ()=>{ clearInterval(sliderInterval); goSlide((sliderIndex+1)%total); sliderInterval=setInterval(()=>goSlide((sliderIndex+1)%total),5000); };
+    
+    const dots = document.getElementById('sliderDots');
+    if (dots && total > 0) {
+        dots.innerHTML = Array.from({ length: total }, (_, i) => 
+            `<div class="dot ${i === 0 ? 'active' : ''}" onclick="goSlide(${i})"></div>`
+        ).join('');
+    }
+
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+
+    if (total <= 1) {
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = 'none';
+        return;
+    }
+
+    prevBtn.style.display = 'flex';
+    nextBtn.style.display = 'flex';
+
+    const restartInterval = () => {
+        clearInterval(sliderInterval);
+        sliderInterval = setInterval(() => goSlide((sliderIndex + 1) % total), 5000);
+    };
+
+    restartInterval();
+    prevBtn.onclick = () => { goSlide((sliderIndex - 1 + total) % total); restartInterval(); };
+    nextBtn.onclick = () => { goSlide((sliderIndex + 1) % total); restartInterval(); };
 }
+
 function goSlide(n) {
     sliderIndex = n;
-    document.getElementById('sliderTrack').style.transform = `translateX(-${n*100}%)`;
-    document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('active',i===n));
+    const track = document.getElementById('sliderTrack');
+    if (track) track.style.transform = `translateX(-${n * 100}%)`;
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === n));
 }
-function openModal(src) { document.getElementById('modalImage').src=src; document.getElementById('imageModal').classList.add('open'); }
-function closeModal() { document.getElementById('imageModal').classList.remove('open'); }
 
-// ---- Navigasi ----
+/**
+ * MODAL & UI HELPERS
+ */
+function openModal(src) {
+    document.getElementById('modalImage').src = src;
+    document.getElementById('imageModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('imageModal').classList.remove('open');
+}
+
+/**
+ * NAVIGATION & EVENTS
+ */
 document.querySelectorAll('[data-page]').forEach(el => {
     el.addEventListener('click', e => {
         e.preventDefault();
-        let page = el.dataset.page;
-        document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+        const page = el.dataset.page;
+        
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById(page).classList.add('active');
-        document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
+        
+        document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
         if (el.tagName === 'A') el.classList.add('active');
+        
         document.getElementById('navMenu').classList.remove('open');
-        window.scrollTo(0,0);
-        if (page === 'berita') { currentPage=1; if(DATA) renderBeritaFull(); }
+        window.scrollTo(0, 0);
+        
+        if (page === 'berita') {
+            currentPage = 1;
+            if (DATA) renderBeritaFull();
+        }
     });
 });
-document.getElementById('menuToggle').onclick = ()=>document.getElementById('navMenu').classList.toggle('open');
 
-// ---- Kategori filter ----
+document.getElementById('menuToggle').onclick = () => {
+    document.getElementById('navMenu').classList.toggle('open');
+};
+
 document.addEventListener('click', e => {
     if (e.target.classList.contains('kategori-link')) {
         e.preventDefault();
         currentKategori = e.target.dataset.kategori;
         currentPage = 1;
-        document.querySelectorAll('.kategori-link').forEach(l=>l.classList.remove('active'));
+        document.querySelectorAll('.kategori-link').forEach(l => l.classList.remove('active'));
         e.target.classList.add('active');
         renderBeritaFull();
     }
 });
 
-// ---- Search ----
 document.getElementById('searchInput').addEventListener('keypress', e => {
-    if (e.key === 'Enter') { document.querySelector('[data-page="berita"]').click(); e.target.value=''; }
+    if (e.key === 'Enter') {
+        document.querySelector('[data-page="berita"]').click();
+        e.target.value = '';
+    }
 });
 
-// ---- PPDB submit ----
+/**
+ * FORM HANDLING
+ */
 document.getElementById('ppdbForm').addEventListener('submit', async e => {
     e.preventDefault();
+    
     const nama = document.getElementById('f_nama').value.trim();
-    if (!nama) { alert('Nama wajib diisi'); return; }
+    if (!nama) return alert('Nama wajib diisi');
+
     const fileIjazah = document.getElementById('f_ijazah').files[0];
-    const fileAkte   = document.getElementById('f_akte').files[0];
-    if (!fileIjazah || !fileAkte) { alert('Harap upload Ijazah dan Akte/KK'); return; }
-    if (fileIjazah.size > 2*1024*1024 || fileAkte.size > 2*1024*1024) { alert('File maksimal 2MB'); return; }
-    const toBase64 = file => new Promise(res => { const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(file); });
-    const ijazahB64 = await toBase64(fileIjazah);
-    const akteB64   = await toBase64(fileAkte);
+    const fileAkte = document.getElementById('f_akte').files[0];
+
+    if (!fileIjazah || !fileAkte) return alert('Harap upload Ijazah dan Akte/KK');
+    if (fileIjazah.size > 2 * 1024 * 1024 || fileAkte.size > 2 * 1024 * 1024) {
+        return alert('Ukuran file maksimal 2MB');
+    }
+
+    const toBase64 = file => new Promise(res => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.readAsDataURL(file);
+    });
+
     const payload = {
-        nama, jk: document.getElementById('f_jk').value,
-        tempat: document.getElementById('f_tempat').value, tgl: document.getElementById('f_tgl').value,
-        alamat: document.getElementById('f_alamat').value, hp: document.getElementById('f_hp').value,
+        nama,
+        jk: document.getElementById('f_jk').value,
+        tempat: document.getElementById('f_tempat').value,
+        tgl: document.getElementById('f_tgl').value,
+        alamat: document.getElementById('f_alamat').value,
+        hp: document.getElementById('f_hp').value,
         jalur: document.getElementById('f_jalur').value,
-        ijazah: ijazahB64, akte: akteB64,
+        ijazah: await toBase64(fileIjazah),
+        akte: await toBase64(fileAkte),
         tanggal_daftar: new Date().toLocaleDateString('id-ID')
     };
+
     try {
         const res = await fetch('api.php?action=add_ppdb', {
-            method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
         });
         const json = await res.json();
+        
         if (json.ok) {
-            document.getElementById('ppdbMsg').innerHTML = '<p style="color:var(--gold);">✅ Pendaftaran berhasil! Data tersimpan.</p>';
+            const msgEl = document.getElementById('ppdbMsg');
+            msgEl.innerHTML = '<p style="color:var(--gold); font-weight:bold;">✅ Pendaftaran berhasil! Data Anda telah tersimpan.</p>';
             document.getElementById('ppdbForm').reset();
-            setTimeout(()=>document.getElementById('ppdbMsg').innerHTML='', 3000);
+            setTimeout(() => msgEl.innerHTML = '', 5000);
         } else {
-            alert('Gagal: ' + (json.error || 'Unknown error'));
+            alert('Gagal: ' + (json.error || 'Terjadi kesalahan sistem'));
         }
-    } catch(err) { alert('Gagal mengirim data.'); }
+    } catch (err) {
+        alert('Gagal mengirim data. Periksa koneksi internet Anda.');
+    }
 });
 
-// ---- Init ----
-loadData();
-loadVisitor();
+/**
+ * INITIALIZATION
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    loadData();
+    loadVisitor();
+});
 </script>
+
 </body>
 </html>
